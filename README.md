@@ -1,11 +1,11 @@
-# Packed Circles
+# Activity Calendar
 
-ES6 d3.js packed circles visualization.
+ES6 d3.js activity calendar visualization.
 
 
 ## Style
 
-Style is expected to be addressed via css. The top-level svg is assigned a class `lgv-packed-circles`. Any style not met by the visualization module is expected to be added by the importing component.
+Style is expected to be addressed via css. The top-level svg is assigned a class `lgv-activity-calendar`. Any style not met by the visualization module is expected to be added by the importing component.
 
 ## Environment Variables
 
@@ -15,43 +15,42 @@ The following values can be set via environment or passed into the class.
 | :-- | :-- | :-- |
 | `DIMENSION_HEIGHT` | integer | height of artboard |
 | `DIMENSION_WIDTH` | integer | width of artboard |
-| `LAYOUT_PADDING_CIRCLES` | integer | space between circles |
-| `PARSE_DELIMETER` | string | separator on source data hierarchy path value |
+| `LAYOUT_CELL_SIZE` | integer | width/height value of individual calendar cell |
 
 ## Install
 
 ```bash
 # install package
-npm install @lgv/packed-circles
+npm install @lgv/activity-calendar
 ```
 
-## PackedCircles
-
-### Data Format
+## Data Format
 
 The following values are the expected input data structure.
 
 ```json
 [
     {
-        id: "some|path",
+        date: "2021-01-01",
+        type: "work",
         value: 1
     },
     {
-        id: "some",
+        date: "2021-01-02",
+        type: "play",
         value: 3
     }
 ]
 ```
 
-### Use Module
+## Use Module
 
 ```bash
-import { PackedCircles } from "@lgv/packed-circles";
+import { ActivityCalendar } from "@lgv/activity-calendar";
 
 // initialize
-const pc = new PackedCircles(data);
+const ac = new ActivityCalendar(data);
 
 // render visualization
-pc.render(document.body);
+ac.render(document.body);
 ```
