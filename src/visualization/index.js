@@ -19,6 +19,7 @@ class ActivityCalendar {
 
         // update self
         this.activityTypes = data ? Object.keys(data) : [];
+        this.artboard = null;
         this.cellSize = cellSize;
         this.dataAggregateDays = null;
         this.dataCells = null;
@@ -27,6 +28,7 @@ class ActivityCalendar {
         this.dateStart = dateStart;
         this.height = height;
         this.months = null;
+        this.name = configuration.name;
         this.paddingDaysOfWeek = null;
         this.paddingMonthsOfYear = null;
         this.weekdays = null;
@@ -128,7 +130,7 @@ class ActivityCalendar {
         domNode
             .attr("class", "lgv-annotation-day-of-week")
             .attr("x", -5)
-            .attr("y", (d, i) => (i * this.cellSize) + (this.cellSize * (this.artboardUnit * 0.116)))
+            .attr("y", (d, i) => (i * this.cellSize) + (this.cellSize * (this.artboardUnit * 0.048)))
             .text(d => d);
     }
 
@@ -151,8 +153,10 @@ class ActivityCalendar {
     configureCellShapes(domNode) {
         domNode
             .attr("class", "lgv-cell")
+            .attr("data-cell-date", d => d[0])
             .attr("data-cell-threshold", d => this.constructThreshold(d))
             .attr("data-cell-type", d => d[2])
+            .attr("data-cell-value", d => d[1])
             .attr("d", d => {
 
                 let i = this.activityTypes.indexOf(d[2]);
@@ -175,7 +179,18 @@ class ActivityCalendar {
 
                 return p;
 
-            });
+            })
+            .on("mouseover", (e,d) => (
+                this.artboard.dispatch("cellmouseover", {
+                    bubbles: true,
+                    detail: {
+                        date: d[0],
+                        type: d[2],
+                        value: d[1],
+                        xy: [e.clientX, e.clientY + this.height]
+                    }
+                })
+            ));
     }
 
     /**
@@ -245,7 +260,7 @@ class ActivityCalendar {
         return select(domNode)
             .append("svg")
             .attr("viewBox", `0 0 ${this.width} ${this.height}`)
-            .attr("class", configuration.name);
+            .attr("class", this.name);
     }
 
     /**
@@ -296,10 +311,11 @@ class ActivityCalendar {
         this.data;
 
         // generate svg artboard
-        let artboard = this.generateArtboard(domNode);
+        this.artboard = this.generateArtboard(domNode);
 
         // calendar content group
-        const artwork = artboard.append("g")
+        const artwork = this.artboard
+            .append("g")
             .attr("transform", d => `translate(${this.paddingDaysOfWeek},${this.paddingMonthsOfYear})`);
 
         // generate days of week/month-year annotations
