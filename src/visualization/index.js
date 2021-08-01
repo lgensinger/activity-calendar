@@ -4,7 +4,7 @@ import { scaleQuantile } from "d3-scale";
 import { select } from "d3-selection";
 import moment from "moment";
 
-import { configurationDimension, configurationLayout } from "../configuration.js";
+import { configuration, configurationDimension, configurationLayout } from "../configuration.js";
 
 /**
  * ActivityCalendar is a time series visualization.
@@ -21,6 +21,7 @@ class ActivityCalendar {
         this.activityTypes = data ? Object.keys(data) : [];
         this.cellSize = cellSize;
         this.dataAggregateDays = null;
+        this.dataCells = null;
         this.dataSource = data;
         this.dateEnd = dateEnd;
         this.dateStart = dateStart;
@@ -31,6 +32,9 @@ class ActivityCalendar {
         this.weekdays = null;
         this.weekIndicies = null;
         this.width = width;
+
+        // using font size as the base unit of measure make responsiveness easier to manage across devices
+        this.artboardUnit = typeof window === "undefined" ? 16 : parseFloat(getComputedStyle(document.body).fontSize);
 
     }
 
@@ -95,6 +99,7 @@ class ActivityCalendar {
 
             // update self
             this.months = months;
+            this.dataCells = this.activityTypes.map(d => this.extractActivity(d)).flat();
 
         }
 
@@ -116,48 +121,79 @@ class ActivityCalendar {
     }
 
     /**
-     * Construct color.
-     * @param {integer} d - datum
-     * @param {integer} index - Index of activity type
-     * @returns A d3 color function.
+     * Position and minimally style days of week in SVG dom element.
+     * @param {node} domNode - d3.js SVG selection
      */
-    constructColor(index) {
+    configureAnnotationDaysOfWeek(domNode) {
+        domNode
+            .attr("class", "lgv-annotation-day-of-week")
+            .attr("x", -5)
+            .attr("y", (d, i) => (i * this.cellSize) + (this.cellSize * (this.artboardUnit * 0.116)))
+            .text(d => d);
+    }
 
-        let result = function() { return "black" };
+    /**
+     * Position and minimally style months in SVG dom element.
+     * @param {node} domNode - d3.js SVG selection
+     */
+    configureAnnotationMonths(domNode) {
+        domNode.append("text")
+            .attr("class", "lgv-annotation-month")
+            .attr("x", d => this.weekIndicies.indexOf(moment(d).isoWeek()) * this.cellSize)
+            .attr("y", -5)
+            .text((d,i) => i == 0 ? `${moment(d).format("MMM")} ${moment(d).format("YYYY")}` : (moment(d).format("M") == 1 ? `${moment(d).format("MMM")} ${moment(d).format("YYYY")}` : moment(d).format("MMM")));
+    }
 
-        let indexIsOdd = index % 2;
-        let values = [];
+    /**
+     * Position and minimally style activity cell shapes in SVG dom element.
+     * @param {node} domNode - d3.js SVG selection
+     */
+    configureCellShapes(domNode) {
+        domNode
+            .attr("class", "lgv-cell")
+            .attr("data-cell-threshold", d => this.constructThreshold(d))
+            .attr("data-cell-type", d => d[2])
+            .attr("d", d => {
 
-        // check for valid range data
-        if (this.dataAggregateDays) {
+                let i = this.activityTypes.indexOf(d[2]);
+                let left = this.weekIndicies.indexOf(moment(d[0]).isoWeek()) * this.cellSize;
+                let top = (moment(d[0]).isoWeekday() * this.cellSize) - this.cellSize;
 
-            if (indexIsOdd) {
+                let right = left + (this.cellSize - 1);
+                let bottom = top + (this.cellSize - 1);
 
-                // build values
-                values = Array.from(this.dataAggregateDays)
-                    .map(d => Array.from(d[1]))
-                    .flat()
-                    .filter((d,i) => i % 2)
-                    .map(d => d[1]);
+                // define connection path
+                let p = path();
+                // source top/left point of entire path shape
+                p.moveTo(left, i == 0 ? top : bottom);
+                // line across top of cell left to right
+                p.lineTo(right, i == 0 ? top : bottom);
+                // line diagonally to bottom left
+                p.lineTo(i == 0 ? left : right, i == 0 ? bottom : top);
+                // close shape
+                p.closePath();
 
-            } else {
+                return p;
 
-                // build values
-                values = Array.from(this.dataAggregateDays)
-                    .map(d => Array.from(d[1]))
-                    .flat()
-                    .filter((d,i) => i % 2 - 1)
-                    .map(d => d[1]);
+            });
+    }
 
-            }
+    /**
+     * Construct threshold for cell value.
+     * @param {selection} datum - d3.js selection
+     * @returns An integer representing the threhold index.
+     */
+    constructThreshold(datum) {
 
-            result = scaleQuantile()
-                .domain(values)
-                .range(indexIsOdd ? ["#cee9f5", "#34b6ed", "#0070a1"] : ["#fce9cc", "#eda12f", "#995e06"]);
+        // extract values pertaining to activity type
+        let values = (this.dataCells || [])
+            .filter(d => d[2] == datum[2])
+            .map(d => d[1]);
 
-            }
-
-        return result;
+        // construct scale
+        return scaleQuantile()
+            .domain(values)
+            .range([1, 2, 3])(datum[1]);
 
     }
 
@@ -180,8 +216,71 @@ class ActivityCalendar {
 
         }
 
-        return result;
+        return result.map(d => d.concat([key]));
 
+    }
+
+    /**
+     * Generate chart annotations in SVG element.
+     * @param {node} domNode - d3.js SVG selection
+     */
+    generateAnnotations(domNode) {
+
+        // days of week
+        const daysOfWeek = this.generateDaysOfWeek(domNode);
+        this.configureAnnotationDaysOfWeek(daysOfWeek);
+
+        // months / year
+        const month = this.generateMonths(domNode);
+        this.configureAnnotationMonths(month);
+
+    }
+
+    /**
+     * Generate SVG artboard in the HTML DOM.
+     * @param {node} domNode - HTML node
+     * @returns A d3.js selection.
+     */
+    generateArtboard(domNode) {
+        return select(domNode)
+            .append("svg")
+            .attr("viewBox", `0 0 ${this.width} ${this.height}`)
+            .attr("class", configuration.name);
+    }
+
+    /**
+     * Generate SVG shapes in the HTML DOM.
+     * @param {node} domNode - HTML node
+     * @returns A d3.js selection.
+     */
+    generateCellShapes(domNode) {
+        return domNode.selectAll(".lgv-cell")
+            .data(this.dataCells || [])
+            .join("path");
+    }
+
+    /**
+     * Generate SVG text elements in the HTML DOM.
+     * @param {node} domNode - HTML node
+     * @returns A d3.js selection.
+     */
+    generateDaysOfWeek(domNode) {
+        return domNode.append("g")
+            .selectAll("text")
+            .data(this.weekdays ? this.weekdays.map(d => d[0]) : [])
+            .join("text");
+    }
+
+    /**
+     * Generate SVG text elements in the HTML DOM.
+     * @param {node} domNode - HTML node
+     * @returns A d3.js selection.
+     */
+    generateMonths(domNode) {
+        return domNode.append("g")
+            .selectAll("g")
+            .data(this.months ? this.months : [])
+            .join("g");
     }
 
     /**
@@ -197,72 +296,20 @@ class ActivityCalendar {
         this.data;
 
         // generate svg artboard
-        let artboard = select(domNode)
-            .append("svg")
-            .attr("viewBox", `0 0 ${this.width} ${this.height}`)
-            .attr("class", "lgv-activity-calendar");
+        let artboard = this.generateArtboard(domNode);
 
         // calendar content group
         const artwork = artboard.append("g")
-            .attr("transform", (d, i) => `translate(${this.paddingDaysOfWeek},${this.paddingMonthsOfYear})`);
+            .attr("transform", d => `translate(${this.paddingDaysOfWeek},${this.paddingMonthsOfYear})`);
 
-        // days of week
-        artwork.append("g")
-            .attr("text-anchor", "end")
-            .selectAll("text")
-            .data(this.weekdays ? this.weekdays.map(d => d[0]) : [])
-            .join("text")
-            .attr("x", -5)
-            .attr("y", (d, i) => (i * this.cellSize) + (this.cellSize * 0.8))
-            .text(d => d);
+        // generate days of week/month-year annotations
+        this.generateAnnotations(artwork);
 
-        // loop through keys
-        for (const i in this.activityTypes) {
+        // generate cell shapes
+        const cells = this.generateCellShapes(artwork);
 
-            let key = this.activityTypes[i];
-
-            // activity cell
-            artwork.selectAll(`.lgv-${key}`)
-                .data(this.extractActivity(key))
-                .join("path")
-                .attr("class", `lgv-${key}`)
-                .attr("d", d => {
-
-                    let left = this.weekIndicies.indexOf(moment(d[0]).isoWeek()) * this.cellSize;
-                    let top = (moment(d[0]).isoWeekday() * this.cellSize) - this.cellSize;
-
-                    let right = left + (this.cellSize - 1);
-                    let bottom = top + (this.cellSize - 1);
-
-                    // define connection path
-                    let p = path();
-                    // source top/left point of entire path shape
-                    p.moveTo(left, i == 0 ? top : bottom);
-                    // line across top of cell left to right
-                    p.lineTo(right, i == 0 ? top : bottom);
-                    // line diagonally to bottom left
-                    p.lineTo(i == 0 ? left : right, i == 0 ? bottom : top);
-                    // close shape
-                    p.closePath();
-
-                    return p;
-
-                })
-                .attr("fill", d => this.constructColor(i)(d[1]));
-
-        }
-
-        // group for months
-        const month = artwork.append("g")
-            .selectAll("g")
-            .data(this.months ? this.months : [])
-            .join("g");
-
-        // month labels
-        month.append("text")
-            .attr("x", d => this.weekIndicies.indexOf(moment(d).isoWeek()) * this.cellSize)
-            .attr("y", -5)
-            .text((d,i) => i == 0 ? `${moment(d).format("MMM")} ${moment(d).format("YYYY")}` : (moment(d).format("M") == 1 ? `${moment(d).format("MMM")} ${moment(d).format("YYYY")}` : moment(d).format("MMM")));
+        // minimally position/style cell shapes
+        this.configureCellShapes(cells);
 
     }
 

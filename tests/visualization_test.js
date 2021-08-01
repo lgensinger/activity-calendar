@@ -1,7 +1,7 @@
 import test from "ava";
 import moment from "moment";
 
-import { configurationDimension, configurationLayout } from "../src/configuration.js";
+import { configuration, configurationDimension, configurationLayout } from "../src/configuration.js";
 import { ActivityCalendar } from "../src/index.js";
 
 let testData = [
@@ -30,6 +30,7 @@ test("get_data", t => {
     ac.data;
 
     t.true(typeof(ac.dataAggregateDays) == "object");
+    t.true(typeof(ac.dataCells) == "object");
     t.true(typeof(ac.months) == "object");
     t.true(typeof(ac.weekIndicies) == "object");
     t.true(typeof(ac.weekdays) == "object");
@@ -49,23 +50,21 @@ test("get_layout", t => {
 
 });
 
-// TEST CONSTRUCTCOLOR //
-test("constructColor", t => {
+// TEST CONSTRUCTTHRESHOLD //
+test("constructThreshold", t => {
 
     // style formatting
-    let result = ac.constructColor(0);
+    let result = ac.constructThreshold([testData[0].date, 1, testData[0].type]);
 
-    t.true(typeof(result) == "function");
+    t.true(typeof(result) == "number");
 
 });
 
 // TEST EXTRACTACTIVITY //
 test("extractActivity", t => {
 
-    let key = testData[0].type;
-
     // pull node label from id
-    let result = ac.extractActivity(key);
+    let result = ac.extractActivity(testData[0].type);
 
     t.true(typeof(result) == "object");
 
@@ -81,7 +80,7 @@ test("render", t => {
     ac.render(document.body);
 
     // get generated element
-    let artboard = document.querySelector(".lgv-activity-calendar");
+    let artboard = document.querySelector(`.${configuration.name}`);
 
     t.true(artboard !== undefined);
     t.true(artboard.nodeName == "svg");
@@ -122,6 +121,7 @@ test("get_data_params", t => {
     acp.data;
 
     t.true(typeof(acp.dataAggregateDays) == "object");
+    t.true(typeof(acp.dataCells) == "object");
     t.true(typeof(acp.months) == "object");
     t.true(typeof(acp.weekIndicies) == "object");
     t.true(typeof(acp.weekdays) == "object");
@@ -141,23 +141,21 @@ test("get_layout_params", t => {
 
 });
 
-// TEST CONSTRUCTCOLOR //
-test("constructColor_params", t => {
+// TEST CONSTRUCTTHRESHOLD //
+test("constructThreshold_params", t => {
 
     // style formatting
-    let result = acp.constructColor(0);
+    let result = acp.constructThreshold([testData[1].date, 1, testData[1].type]);
 
-    t.true(typeof(result) == "function");
+    t.true(typeof(result) == "number");
 
 });
 
 // TEST EXTRACTACTIVITY //
 test("extractActivity_params", t => {
 
-    let key = testData[0].type;
-
     // pull node label from id
-    let result = acp.extractActivity(key);
+    let result = acp.extractActivity(testData[0].type);
 
     t.true(typeof(result) == "object");
 
@@ -173,7 +171,7 @@ test("render_params", t => {
     acp.render(document.body);
 
     // get generated element
-    let artboard = document.querySelector(".lgv-activity-calendar");
+    let artboard = document.querySelector(`.${configuration.name}`);
 
     t.true(artboard !== undefined);
     t.true(artboard.nodeName == "svg");
