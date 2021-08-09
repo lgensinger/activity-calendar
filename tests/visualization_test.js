@@ -54,9 +54,9 @@ test("get_layout", t => {
 test("constructThreshold", t => {
 
     // style formatting
-    let result = ac.constructThreshold([testData[0].date, 1, testData[0].type]);
+    let result = ac.constructThreshold();
 
-    t.true(typeof(result) == "number");
+    t.true(typeof(result) == "function");
 
 });
 
@@ -145,9 +145,9 @@ test("get_layout_params", t => {
 test("constructThreshold_params", t => {
 
     // style formatting
-    let result = acp.constructThreshold([testData[1].date, 1, testData[1].type]);
+    let result = acp.constructThreshold();
 
-    t.true(typeof(result) == "number");
+    t.true(typeof(result) == "function");
 
 });
 

@@ -1,6 +1,6 @@
-import { groups, rollup } from "d3-array";
+import { extent, groups, rollup } from "d3-array";
 import { path } from "d3-path";
-import { scaleQuantile } from "d3-scale";
+import { scaleQuantize } from "d3-scale";
 import { select } from "d3-selection";
 import moment from "moment";
 
@@ -113,7 +113,7 @@ class ActivityCalendar {
      */
     get layout() {
 
-        this.paddingDaysOfWeek = this.cellSize * 2;
+        this.paddingDaysOfWeek = this.cellSize;
         this.paddingMonthsOfYear = this.cellSize;
         let weeks = moment(this.dateEnd).diff(moment(this.dateStart), "week");
 
@@ -143,7 +143,16 @@ class ActivityCalendar {
             .attr("class", "lgv-annotation-month")
             .attr("x", d => this.weekIndicies.indexOf(moment(d).isoWeek()) * this.cellSize)
             .attr("y", -5)
-            .text((d,i) => i == 0 ? `${moment(d).format("MMM")} ${moment(d).format("YYYY")}` : (moment(d).format("M") == 1 ? `${moment(d).format("MMM")} ${moment(d).format("YYYY")}` : moment(d).format("MMM")));
+            .each((d, i, nodes) => {
+                select(nodes[i])
+                    .selectAll("tspan")
+                    .data(i == 0 ? [moment(d).format("MMM"), moment(d).format("YYYY")] : (moment(d).format("M") == 1 ? [moment(d).format("MMM"), moment(d).format("YYYY")] : [moment(d).format("MMM")])
+                    )
+                    .enter()
+                    .append("tspan")
+                    .text(x => x)
+                    .attr("dx", (x, j) => j == 0 ? "" : 3)
+            });
     }
 
     /**
@@ -151,10 +160,14 @@ class ActivityCalendar {
      * @param {node} domNode - d3.js SVG selection
      */
     configureCellShapes(domNode) {
+
+        // have to reassign color function or the this conflicts inside the accessor
+        let threshold = this.constructThreshold();
+
         domNode
             .attr("class", "lgv-cell")
             .attr("data-cell-date", d => d[0])
-            .attr("data-cell-threshold", d => this.constructThreshold(d))
+            .attr("data-cell-threshold", d => threshold(d[1]))
             .attr("data-cell-type", d => d[2])
             .attr("data-cell-value", d => d[1])
             .attr("d", d => {
@@ -180,35 +193,35 @@ class ActivityCalendar {
                 return p;
 
             })
-            .on("mouseover", (e,d) => (
+            .on("mouseover", (e,d) => {
+
                 this.artboard.dispatch("cellmouseover", {
                     bubbles: true,
                     detail: {
                         date: d[0],
+                        threshold: e.target.dataset.cellThreshold,
                         type: d[2],
                         value: d[1],
-                        xy: [e.clientX, e.clientY + this.height]
+                        xy: [e.clientX + this.cellSize, e.clientY + this.cellSize]
                     }
                 })
-            ));
+            });
     }
 
     /**
      * Construct threshold for cell value.
-     * @param {selection} datum - d3.js selection
-     * @returns An integer representing the threhold index.
+     * @returns A d3.js scale function.
      */
-    constructThreshold(datum) {
+    constructThreshold() {
 
         // extract values pertaining to activity type
         let values = (this.dataCells || [])
-            .filter(d => d[2] == datum[2])
             .map(d => d[1]);
 
         // construct scale
-        return scaleQuantile()
-            .domain(values)
-            .range([1, 2, 3])(datum[1]);
+        return scaleQuantize()
+            .domain(extent(values))
+            .range([1, 2, 3]);
 
     }
 
