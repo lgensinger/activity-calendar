@@ -72,15 +72,36 @@ class ActivityCalendar {
                 d => moment(d[0]).isoWeek()
             );
 
-            // sort years/weeks
-            let nestByYearWeekSorted = nestByYearWeek.map(y => [y[0], y[1].sort((a, b) => a[0] - b[0])]).sort((a, b) => a[0] - b[0]);
+            let dateEnd = moment(this.dateEnd);
+            let dateStart = moment(this.dateStart);
+
+            let weeks = [];
+
+            // get list of first date of months
+            while (dateStart < dateEnd) {
+
+                // capture actual date iso string since moment mutates values
+                let dateDate = dateStart.format("YYYY-MM-DD");
+                let dateWeek = dateStart.format("YYYY-W");
+
+                let days = this.isoDaysofWeek(dateDate);
+
+                // have to check if the first of the month is contained in the week
+                let firstOfMonths = days.filter(d => d.split("-")[2] == "01");
+                let includesFirstOfMonth = firstOfMonths.length > 0;
+
+                // if so need to use that date
+                // this ensures the month annotations will lay out properly
+                weeks.push(includesFirstOfMonth ? moment(firstOfMonths[0]).format("YYYY-W") : dateWeek);
+
+                // iterate the date value
+                dateStart.add(1, "week");
+
+            }
 
             // because the time range may/may not be an entire year
             // we need to map index to iso week so we can reference the position later
-            this.weekIndicies = nestByYearWeekSorted.map(d => d[1]).flat().map(d => d[0]);
-
-            let dateEnd = moment(this.dateEnd);
-            let dateStart = moment(this.dateStart);
+            this.weekIndicies = weeks;
 
             // get weekday values
             let weekdays = moment.weekdays();
@@ -92,6 +113,9 @@ class ActivityCalendar {
             this.weekdays = weekdays;
 
             let months = [];
+
+            dateEnd = moment(this.dateEnd);
+            dateStart = moment(this.dateStart);
 
             // get list of first date of months
             while (dateStart < dateEnd) {
@@ -141,7 +165,7 @@ class ActivityCalendar {
     configureAnnotationMonths(domNode) {
         domNode.append("text")
             .attr("class", "lgv-annotation-month")
-            .attr("x", d => this.weekIndicies.indexOf(moment(d).isoWeek()) * this.cellSize)
+            .attr("x", d => this.weekIndicies.indexOf(moment(d).format("YYYY-W")) * this.cellSize)
             .attr("y", -5)
             .each((d, i, nodes) => {
                 select(nodes[i])
@@ -172,8 +196,19 @@ class ActivityCalendar {
             .attr("data-cell-value", d => d[1])
             .attr("d", d => {
 
+                // have to determine if there is a beginning of the year
+                // in the week the current date falls
+                // otherwise the week may not be calculatable
+                // if the captured index reflects the following or past year, i.e. 52/53 problem
+                let days = this.isoDaysofWeek(d[0]);
+                let firstOfYears = days.filter(d => d.split("-")[1] == "01" && d.split("-")[2] == "01");
+                let includesFirstOfYear = firstOfYears.length > 0;
+
+                // determine what column in the grid the iso week is in
+                let columnWeek = this.weekIndicies.indexOf(includesFirstOfYear ? moment(firstOfYears[0]).format("YYYY-W") : moment(d[0]).format("YYYY-W"));
+
                 let i = this.activityTypes.indexOf(d[2]);
-                let left = this.weekIndicies.indexOf(moment(d[0]).isoWeek()) * this.cellSize;
+                let left = columnWeek * this.cellSize;
                 let top = (moment(d[0]).isoWeekday() * this.cellSize) - this.cellSize;
 
                 let right = left + (this.cellSize - 1);
@@ -309,6 +344,29 @@ class ActivityCalendar {
             .selectAll("g")
             .data(this.months ? this.months : [])
             .join("g");
+    }
+
+    /**
+     * Get ISO days of the week for a given date.
+     * @param {currentDate} string - iso 8601 date value
+     * @returns An array of strings where each is an iso 8601 date value representing a day in a week.
+     */
+    isoDaysofWeek(currentDate) {
+
+        // get iso week start/end
+        let weekStart = moment(currentDate).startOf("isoWeek");
+        let weekEnd = moment(currentDate).add(6, "day");
+
+        let days = [];
+
+        // generate days in between iso start/end of week
+        while (weekStart < weekEnd) {
+            days.push(weekStart.format("YYYY-MM-DD"));
+            weekStart.add(1, "day");
+        }
+
+        return days;
+
     }
 
     /**
