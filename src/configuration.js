@@ -9,9 +9,5 @@ const configurationDimension = {
     width: process.env.DIMENSION_WIDTH || 600
 }
 
-const configurationLayout = {
-    cellSize: process.env.LAYOUT_CELL_SIZE || 10
-}
-
-export { configuration, configurationDimension, configurationLayout };
+export { configuration, configurationDimension };
 export default configuration;

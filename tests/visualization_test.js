@@ -1,7 +1,7 @@
 import test from "ava";
 import moment from "moment";
 
-import { configuration, configurationDimension, configurationLayout } from "../src/configuration.js";
+import { configuration, configurationDimension } from "../src/configuration.js";
 import { ActivityCalendar } from "../src/index.js";
 
 let testData = [
@@ -17,7 +17,6 @@ const ac = new ActivityCalendar();
 // TEST INIT //
 test("init", t => {
 
-    t.true(ac.cellSize === configurationLayout.cellSize);
     t.true(ac.height === configurationDimension.height);
     t.true(ac.width === configurationDimension.width);
 
@@ -44,8 +43,6 @@ test("get_layout", t => {
     ac.layout;
 
     t.true(typeof(ac.height) == "number");
-    t.true(typeof(ac.paddingDaysOfWeek) == "number");
-    t.true(typeof(ac.paddingMonthsOfYear) == "number");
     t.true(typeof(ac.width) == "number");
 
 });
@@ -93,7 +90,6 @@ test("render", t => {
 
 let testWidth = 300;
 let testHeight = 500;
-let testCellSize = 5;
 
 // initialize
 const acp = new ActivityCalendar(
@@ -101,14 +97,12 @@ const acp = new ActivityCalendar(
     moment().format("YYYY-MM-DD"),
     moment(moment().format("YYYY-MM-DD")).add(5, "days"),
     testWidth,
-    testHeight,
-    testCellSize
+    testHeight
 );
 
 // TEST INIT //
 test("init_params", t => {
 
-    t.true(acp.cellSize === testCellSize);
     t.true(acp.height === testHeight);
     t.true(acp.width === testWidth);
 
@@ -135,8 +129,6 @@ test("get_layout_params", t => {
     acp.layout;
 
     t.true(typeof(acp.height) == "number");
-    t.true(typeof(acp.paddingDaysOfWeek) == "number");
-    t.true(typeof(acp.paddingMonthsOfYear) == "number");
     t.true(typeof(acp.width) == "number");
 
 });

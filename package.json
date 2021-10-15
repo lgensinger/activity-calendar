@@ -1,6 +1,6 @@
 {
   "name": "@lgv/activity-calendar",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "type": "module",
   "description": "ES6 d3.js activity calendar visualization",
   "main": "src/index.js",

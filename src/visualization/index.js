@@ -4,7 +4,7 @@ import { scaleQuantize } from "d3-scale";
 import { select } from "d3-selection";
 import moment from "moment";
 
-import { configuration, configurationDimension, configurationLayout } from "../configuration.js";
+import { configuration, configurationDimension } from "../configuration.js";
 
 /**
  * ActivityCalendar is a time series visualization.
@@ -15,12 +15,17 @@ import { configuration, configurationDimension, configurationLayout } from "../c
  * @param {integer} width - artboard width
  */
 class ActivityCalendar {
-    constructor(data, dateStart, dateEnd, width=configurationDimension.width, height=configurationDimension.height, cellSize=configurationLayout.cellSize) {
+    constructor(data, dateStart, dateEnd, width=configurationDimension.width, height=configurationDimension.height) {
 
         // update self
         this.activityTypes = data ? Object.keys(data) : [];
         this.artboard = null;
-        this.cellSize = cellSize;
+        this.cellHeight = null;
+        this.cellWidth = null;
+        this.container = null;
+        this.containerCalendar = null;
+        this.containerDaysOfWeek = null;
+        this.containerWeeksOfYear = null;
         this.dataAggregateDays = null;
         this.dataCells = null;
         this.dataSource = data;
@@ -29,11 +34,12 @@ class ActivityCalendar {
         this.height = height;
         this.months = null;
         this.name = configuration.name;
-        this.paddingDaysOfWeek = null;
-        this.paddingMonthsOfYear = null;
-        this.weekdays = null;
-        this.weekIndicies = null;
+        this.paddingSide = 0;
+        this.paddingTop = 0;
+        this.weekdays = [];
+        this.weekIndicies = [];
         this.width = width;
+        this.years = null;
 
         // using font size as the base unit of measure make responsiveness easier to manage across devices
         this.artboardUnit = typeof window === "undefined" ? 16 : parseFloat(getComputedStyle(document.body).fontSize);
@@ -42,7 +48,6 @@ class ActivityCalendar {
 
     /**
      * Condition data for visualization requirements.
-     * @returns A xx.
      */
     get data() {
 
@@ -66,12 +71,6 @@ class ActivityCalendar {
                 d => d.type
             );
 
-            // nest data by year and iso week
-            let nestByYearWeek = groups(this.dataAggregateDays,
-                d => moment(d[0]).format("YYYY"),
-                d => moment(d[0]).isoWeek()
-            );
-
             let dateEnd = moment(this.dateEnd);
             let dateStart = moment(this.dateStart);
 
@@ -81,18 +80,10 @@ class ActivityCalendar {
             while (dateStart < dateEnd) {
 
                 // capture actual date iso string since moment mutates values
-                let dateDate = dateStart.format("YYYY-MM-DD");
                 let dateWeek = dateStart.format("YYYY-W");
 
-                let days = this.isoDaysofWeek(dateDate);
-
-                // have to check if the first of the month is contained in the week
-                let firstOfMonths = days.filter(d => d.split("-")[2] == "01");
-                let includesFirstOfMonth = firstOfMonths.length > 0;
-
-                // if so need to use that date
-                // this ensures the month annotations will lay out properly
-                weeks.push(includesFirstOfMonth ? moment(firstOfMonths[0]).format("YYYY-W") : dateWeek);
+                // update list
+                weeks.push(dateWeek);
 
                 // iterate the date value
                 dateStart.add(1, "week");
@@ -102,6 +93,9 @@ class ActivityCalendar {
             // because the time range may/may not be an entire year
             // we need to map index to iso week so we can reference the position later
             this.weekIndicies = weeks;
+
+            // extract years
+            this.years = [...new Set(this.weekIndicies.map(d => d.split("-")[0]))];
 
             // get weekday values
             let weekdays = moment.weekdays();
@@ -137,12 +131,13 @@ class ActivityCalendar {
      */
     get layout() {
 
-        this.paddingDaysOfWeek = this.cellSize;
-        this.paddingMonthsOfYear = this.cellSize;
-        let weeks = moment(this.dateEnd).diff(moment(this.dateStart), "week");
+        // space for annotations
+        this.paddingTop = this.artboardUnit * 2;
+        this.paddingSide = this.artboardUnit * 2;
 
-        this.height = (this.cellSize * 7) + this.paddingMonthsOfYear;
-        this.width = this.cellSize * weeks + this.paddingDaysOfWeek;
+        // determine cell size
+        this.cellHeight = (this.height - this.paddingTop) / this.weekdays.length;
+        this.cellWidth = (this.width - this.paddingSide) / this.weekIndicies.length;
 
     }
 
@@ -152,9 +147,9 @@ class ActivityCalendar {
      */
     configureAnnotationDaysOfWeek(domNode) {
         domNode
-            .attr("class", "lgv-annotation-day-of-week")
-            .attr("x", -5)
-            .attr("y", (d, i) => (i * this.cellSize) + (this.cellSize * (this.artboardUnit * 0.048)))
+            .attr("class", "lgv-annotation-day")
+            .attr("x", 0)
+            .attr("y", (d,i) => i * this.cellHeight)
             .text(d => d);
     }
 
@@ -163,17 +158,55 @@ class ActivityCalendar {
      * @param {node} domNode - d3.js SVG selection
      */
     configureAnnotationMonths(domNode) {
-        domNode.append("text")
+        domNode
             .attr("class", "lgv-annotation-month")
-            .attr("x", d => this.weekIndicies.indexOf(moment(d).format("YYYY-W")) * this.cellSize)
-            .attr("y", -5)
+            .attr("x", d => {
+
+                // get iso week
+                let isoWeek = moment(d).format("W");
+
+                // need to find how many years we span
+                let isMultiYear = this.years.length > 1;
+
+                // set default for "normal" months that don't cross a year boundary
+                let yearWeek = moment(d).format("YYYY-W");
+
+                // if week value is 53 and there are multiple 53 (i.e. time range spans multiple years)
+                if (isMultiYear && (isoWeek == 53 || isoWeek == 1)) {
+
+                    // try to find by newer year first
+                    if (isoWeek == 1) {
+
+                        // update
+                        yearWeek = `${moment(d).format("YYYY")}-1`;
+
+                    } else {
+
+                        // need to find the index of week 53 for year previous for proper alignment
+                        yearWeek = `${moment(d).format("YYYY") - 1}-${moment(d).format("W")}`;
+
+                    }
+
+                }
+
+                // get index of date in list of dates in range
+                let weekIndex = this.weekIndicies.indexOf(yearWeek);
+
+                // if -1 means the value is on the time boundary
+                return  weekIndex === -1 ? this.artboardUnit : (weekIndex * this.cellWidth);
+
+            })
+            .attr("y", this.cellHeight * 0.6)
             .each((d, i, nodes) => {
                 select(nodes[i])
                     .selectAll("tspan")
                     .data(i == 0 ? [moment(d).format("MMM"), moment(d).format("YYYY")] : (moment(d).format("M") == 1 ? [moment(d).format("MMM"), moment(d).format("YYYY")] : [moment(d).format("MMM")])
                     )
-                    .enter()
-                    .append("tspan")
+                    .join(
+                        enter => enter.append("tspan"),
+                        update => update,
+                        exit => exit.remove()
+                    )
                     .text(x => x)
                     .attr("dx", (x, j) => j == 0 ? "" : 3)
             });
@@ -201,18 +234,21 @@ class ActivityCalendar {
                 // otherwise the week may not be calculatable
                 // if the captured index reflects the following or past year, i.e. 52/53 problem
                 let days = this.isoDaysofWeek(d[0]);
-                let firstOfYears = days.filter(d => d.split("-")[1] == "01" && d.split("-")[2] == "01");
-                let includesFirstOfYear = firstOfYears.length > 0;
+
+                // need to get iso week value for each day in week
+                // seems counterintuitive but some dates in the same
+                // week could fall into different iso weeks
+                let daysWeek = days.map(d => moment(d).format("W"));
 
                 // determine what column in the grid the iso week is in
-                let columnWeek = this.weekIndicies.indexOf(includesFirstOfYear ? moment(firstOfYears[0]).format("YYYY-W") : moment(d[0]).format("YYYY-W"));
-
+                let columnWeek = this.weekIndicies.indexOf(moment(d[0]).format("YYYY-W"));
                 let i = this.activityTypes.indexOf(d[2]);
-                let left = columnWeek * this.cellSize;
-                let top = (moment(d[0]).isoWeekday() * this.cellSize) - this.cellSize;
+                let left = columnWeek * this.cellWidth;
+                let top = (moment(d[0]).isoWeekday() - 1) * this.cellHeight;
 
-                let right = left + (this.cellSize - 1);
-                let bottom = top + (this.cellSize - 1);
+                // -value to generate padding around cell
+                let right = left + (this.cellWidth - (this.artboardUnit * 0.15));
+                let bottom = top + (this.cellHeight - (this.artboardUnit * 0.15));
 
                 // define connection path
                 let p = path();
@@ -237,7 +273,7 @@ class ActivityCalendar {
                         threshold: e.target.dataset.cellThreshold,
                         type: d[2],
                         value: d[1],
-                        xy: [e.clientX + this.cellSize, e.clientY + this.cellSize]
+                        xy: [e.clientX + this.artboardUnit, e.clientY + this.artboardUnit]
                     }
                 })
             });
@@ -285,29 +321,34 @@ class ActivityCalendar {
 
     /**
      * Generate chart annotations in SVG element.
-     * @param {node} domNode - d3.js SVG selection
      */
-    generateAnnotations(domNode) {
+    generateAnnotations() {
 
         // days of week
-        const daysOfWeek = this.generateDaysOfWeek(domNode);
+        const daysOfWeek = this.generateDaysOfWeek(this.containerDaysOfWeek);
         this.configureAnnotationDaysOfWeek(daysOfWeek);
 
         // months / year
-        const month = this.generateMonths(domNode);
+        const month = this.generateMonths(this.containerWeeksOfYear);
         this.configureAnnotationMonths(month);
 
     }
 
     /**
      * Generate SVG artboard in the HTML DOM.
-     * @param {node} domNode - HTML node
+     * @param {selection} domNode - d3 selection
      * @returns A d3.js selection.
      */
     generateArtboard(domNode) {
-        return select(domNode)
-            .append("svg")
-            .attr("viewBox", `0 0 ${this.width} ${this.height}`)
+        return domNode
+            .selectAll("svg")
+            .data([{height: this.height, width: this.width}])
+            .join(
+                enter => enter.append("svg"),
+                update => update,
+                exit => exit.remove()
+            )
+            .attr("viewBox", d => `0 0 ${d.width} ${d.height}`)
             .attr("class", this.name);
     }
 
@@ -317,9 +358,14 @@ class ActivityCalendar {
      * @returns A d3.js selection.
      */
     generateCellShapes(domNode) {
-        return domNode.selectAll(".lgv-cell")
+        return domNode
+            .selectAll(".lgv-cell")
             .data(this.dataCells || [])
-            .join("path");
+            .join(
+                enter => enter.append("path"),
+                update => update,
+                exit => exit.remove()
+            );
     }
 
     /**
@@ -328,10 +374,14 @@ class ActivityCalendar {
      * @returns A d3.js selection.
      */
     generateDaysOfWeek(domNode) {
-        return domNode.append("g")
-            .selectAll("text")
+        return domNode
+            .selectAll(".lgv-annotation-day-of-week")
             .data(this.weekdays ? this.weekdays.map(d => d[0]) : [])
-            .join("text");
+            .join(
+                enter => enter.append("text"),
+                update => update,
+                exit => exit.remove()
+            );
     }
 
     /**
@@ -340,10 +390,85 @@ class ActivityCalendar {
      * @returns A d3.js selection.
      */
     generateMonths(domNode) {
-        return domNode.append("g")
-            .selectAll("g")
+        return domNode
+            .selectAll(".lgv-annotation-month")
             .data(this.months ? this.months : [])
-            .join("g");
+            .join(
+                enter => enter.append("text"),
+                update => update,
+                exit => exit.remove()
+            )
+    }
+
+    /**
+     * Generate top-level logical groupings.
+     */
+    generateContainers() {
+
+        // days of week container
+        this.containerDaysOfWeek = this.artboard
+            .selectAll(".lgv-annotation-days-of-week")
+            .data(d => [d])
+            .join(
+                enter => enter.append("g"),
+                update => update,
+                exit => exit.remove()
+            )
+            .attr("class", "lgv-annotation-days-of-week")
+            .attr("transform", `translate(0,${this.paddingTop + this.artboardUnit})`);
+
+        // month of year container
+        this.containerWeeksOfYear = this.artboard
+            .selectAll(".lgv-annotation-months-of-year")
+            .data(d => [d])
+            .join(
+                enter => enter.append("g"),
+                update => update,
+                exit => exit.remove()
+            )
+            .attr("class", "lgv-annotation-months-of-year")
+            .attr("transform", `translate(${this.paddingSide},0)`);
+
+        // calendar content container
+        this.containerCalendar = this.artboard
+            .selectAll(".lgv-calendar")
+            .data(d => [d])
+            .join(
+                enter => enter.append("g"),
+                update => update,
+                exit => exit.remove()
+            )
+            .attr("class", "lgv-calendar")
+            .attr("transform", d => `translate(${this.paddingSide},${this.paddingTop})`);
+
+    }
+
+    /**
+     * Generate visualization.
+     */
+    generateVisualization() {
+
+        // condition data
+        this.data;
+
+        // determine layout specs
+        this.layout;
+
+        // generate svg artboard
+        this.artboard = this.generateArtboard(this.container);
+
+        // generate top-level groupings
+        this.generateContainers(this.artboard);
+
+        // generate days of week/month-year annotations
+        this.generateAnnotations();
+
+        // generate cell shapes
+        const cells = this.generateCellShapes(this.containerCalendar);
+
+        // minimally position/style cell shapes
+        this.configureCellShapes(cells);
+
     }
 
     /**
@@ -375,28 +500,29 @@ class ActivityCalendar {
      */
     render(domNode) {
 
-        // determine layout specs
-        this.layout;
+        // update self
+        this.container = select(domNode);
 
-        // condition data
-        this.data;
+        // generate visualization
+        this.generateVisualization();
 
-        // generate svg artboard
-        this.artboard = this.generateArtboard(domNode);
+    }
 
-        // calendar content group
-        const artwork = this.artboard
-            .append("g")
-            .attr("transform", d => `translate(${this.paddingDaysOfWeek},${this.paddingMonthsOfYear})`);
+    /**
+     * Update visualization.
+     * @param {object} data - key/values where each key is a series label and corresponding value is an array of values
+     * @param {integer} height - height of artboard
+     * @param {integer} width - width of artboard
+     */
+    update(data, width, height) {
 
-        // generate days of week/month-year annotations
-        this.generateAnnotations(artwork);
+        // update self
+        this.dataSource = data;
+        this.height = height;
+        this.width = width;
 
-        // generate cell shapes
-        const cells = this.generateCellShapes(artwork);
-
-        // minimally position/style cell shapes
-        this.configureCellShapes(cells);
+        // generate visualization
+        this.generateVisualization();
 
     }
 
